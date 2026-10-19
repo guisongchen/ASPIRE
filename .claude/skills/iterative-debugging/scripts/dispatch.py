@@ -68,7 +68,8 @@ WORKER_ADDENDA = """
    version budget on **one-variable ablations** of whatever your program most depends on, and
    report what they measure. Two tasks in that position produced the campaign's most useful
    findings that way. A pass count frequently cannot tell two placements apart — see
-   `transport.md` §*Grade a Placement by the Object's LANDED POSE*.
+   `transport.md` §*Placement Approach* → *A Descent That Self-limits on the Held Object Is a
+   Placement, Not a Failure*.
 7. **When you report your unseen result, name the residual failure REGIME, not a predicted rate.**
    Workers that named a specific remaining mode were well calibrated against held-out; workers
    reasoning from the aggregate development rate were wrong by up to 30 points.

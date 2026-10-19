@@ -60,6 +60,142 @@ lifting to avoid sweeping through obstacles (opened drawers, adjacent objects, c
 Add a subsection here (trigger → code → evidence) for approach sequences above the target
 (hover height, descent speed, drop vs. lower) that prevent bounce, tip, or miss.
 
+### Stage the Approach: Never Combine a Large Wrist Rotation With a Deep Reach
+
+**Trigger.** A single move that both rotates the wrist a long way and reaches low/forward; symptom is
+that the eef travels **away** from its target on at least one axis while the other joints look fine.
+
+**Measured** on `libero_goal_swap/task_9`: the plan reported `max_joint_delta_rad: 0.05` and then drove
+the eef from x 0.4513 to 0.3456 — 16 cm in the wrong direction — ending short of the target. Splitting
+it into **translate with the reset orientation → rotate in place at height → vertical descend** made
+every stage converge on 15/15 seeds.
+
+```python
+home_q = [float(v) for v in get_robot_state().end_effector_poses["primary"].quaternion_wxyz]
+goto([x, y, top + 0.10], home_q,  base_frame)   # carry the approach over the object
+goto([x, y, top + 0.10], grasp_q, base_frame)   # rotate where nothing can be hit
+goto([x, y, grasp_z],   grasp_q, base_frame)   # descend on the object
+```
+
+A **second** consequence, measured the same day on `libero_goal_swap/task_8`: the first
+home->low-standoff move **always** lands 4-8 cm short in +y, and the "sensible robustness" retry then
+sweeps the 8 cm-wide open jaw horizontally at the target's own mid-height — it knocked the bottle over
+on 7/15 seeds. Re-issue a long approach **at height**, never sideways at grasp height.
+
+### A Descent That Self-limits on the Held Object Is a Placement, Not a Failure
+
+When you carry an object down onto a receiving surface, the descent may stop **short of its
+commanded height** because the object is already resting on the surface — the joint servo cannot
+close the last few centimetres and returns `ok=False`. That is a successful placement, not a
+stuck stage. Measured on `libero_goal_swap/task_9` (verifier, 5/5 seeds): a descend-to-release
+stage froze at eef z 0.3401–0.3403 against a commanded 0.2879–0.2889 — **5.2 cm short, with xy
+within 5 mm and the short axis exactly z** — because the upright bottle's base met the plane.
+Every seed passed. The read to use is *which axis is short and by how much*: a pure-z shortfall
+with xy converged is contact; a joint-space residual on several axes is a servo failure.
+
+For a **held object**, the release can be judged the same way: if `open_gripper()` returns
+`ok=False` after a few steps while `gripper_positions["primary"]` has moved most of the way open
+(measured 0.72–0.94), the object is released — read the achieved jaw position, not the flag.
+
+**`ok=False` is not always a servo wall.** On `libero_goal_swap/task_8` the placement descent
+returned `ok=False` with `failure_code=terminated` — the benchmark's success predicate had already
+fired at object/support contact and ended the episode. The outside signature is the same as a
+servo-limited descent (pure-z shortfall, xy converged, one axis short), so a program must read
+`failure_code` before it diagnoses anything: on `terminated`, do not retry, do not raise, and do not
+assume a release happened.
+
+The transit that got a held bottle over a 0.33 m obstacle without sweeping through it (5/5 seeds,
+40–42 + 44–51 + 122 steps): raise at the grasp xy to `q99(obstacle_z) + 0.07`, translate at that
+height, then descend in world z at the placement xy.
+
+### Close the Loop on the Measured Pose After Every `move_to_pose`
+
+**Trigger.** A pose is reached only approximately — `move_to_pose` returns
+`ok=False, code=controller_failed` while the arm visibly got there — or a grasp/place that needs
+better than ~1 cm sits just above or beside its target.
+
+The residual is **systematic**: re-issuing the pose with the measured error added converges. Measured
+on `libero_goal_swap/task_8`: first attempt left **8.4 mm** and reported `ok=False`; one correction
+left **0.6 mm**. So `ok=False` with a small final error is **not** a failed motion — read the measured
+eef position before treating a stage as failed. Cap the corrections at 3 so an unreachable pose
+cannot eat the episode; each costs ~6-10 ticks.
+
+```python
+def goto(goal, quat, frame, tolerance=0.006, attempts=3):
+    goal = [float(v) for v in goal]
+    want = list(goal)
+    for _ in range(attempts):
+        move_to_pose(Pose(position=want, quaternion_wxyz=quat, frame=frame), tolerance, 200)
+        eef = [float(v) for v in get_robot_state().end_effector_poses["primary"].position]
+        if max(abs(eef[i] - goal[i]) for i in range(3)) <= tolerance:
+            break
+        want = [want[i] + (goal[i] - eef[i]) for i in range(3)]
+```
+
+### Carry Offset From the Pre-Grasp Measurement, Not From the Held Object
+
+After a rim/edge pinch the object's centre hangs **off the eef**, so the placement eef target must be
+corrected by that offset. Measure it **before any motion**, from the same unoccluded cloud you picked
+the grasp with; re-localising the *held* object to recover it aims the placement 1–2 cm off, because
+the held cloud is biased along the camera's depth axis.
+
+`quantile` is the three-line helper defined in `grasp.md` / `localize.md`; copy it into your program
+(cross-file references are not imports).
+
+```python
+# BEFORE motion: grip point and object centre from one cloud.
+points = bowl.point_cloud.points
+rim_z = quantile((p[2] for p in points), 0.98)
+y_hi = quantile((p[1] for p in points), 0.98)
+grip = (quantile((p[0] for p in points), 0.50), y_hi - 0.002, rim_z - 0.020)
+centre = (quantile((p[0] for p in points), 0.50), quantile((p[1] for p in points), 0.50))
+design_offset = (centre[0] - grip[0], centre[1] - grip[1])
+place_x = plate_centre[0] - design_offset[0]
+place_y = plate_centre[1] - design_offset[1]
+```
+
+**Evidence.** `libero_goal_swap/task_8`: measured carried offset in y was **−0.0481..−0.0512 m**
+against a design offset of **−0.0437..−0.0443** — the rigid-pinch premise holds and a pendulum
+reading is refuted; aiming the eef at the plate centre would have left ~5 cm of y error. The x term
+reproduces in sign but the entry **under-predicts it by 4.7–7.6 mm**, which is exactly the observed
+`+6.6..+13.0 mm` landed residual in y; add ~5 mm to `|design_offset|` when sub-centimetre placement
+matters. (Proposer's version was mock-validated but never run as a version; the verifier reproduced
+the mechanism, not a sweep at 5/5.)
+
+### The Release Push: Opening the Jaws Displaces the Object
+
+**Trigger.** An object grasped at its rim/edge (jaws on a thin part, object hanging to one side of
+the eef) lands systematically off-centre in the direction of the grasp, and the pass count hides it
+until one seed falls off the support.
+
+**How to measure.** Place 5-10 times, record `final_object_centre - support_centre`, and aim the
+place pose short by the mean of that vector, *against* the grasp direction.
+
+**Measured** on `libero_goal_swap/task_8`: the bowl landed **+1.0..+2.5 cm in world y on all 15 dev
+seeds** (mean 1.42 cm, median 1.2 cm), x unbiased; the one seed outside the goal tolerance was the
++2.5 cm tail. Aiming 1.3 cm short took the task from 14/15 to 15/15. **That 1.3 cm is a fitted
+constant for this scene, not a physical universal** — a new scene needs its own measurement.
+
+### Grade a Placement by the Object's LANDED POSE
+
+A pass count cannot tell two placements apart, and on some benchmarks the episode ends **at
+contact**, so "it passed" does not even mean "it was released". Grade the geometry directly, in the
+support plane, at the instant the episode is decided:
+
+- **object-centre residual to the target-centre** (x, y in `robot_base`), from the object's own
+  per-axis cloud quantiles — not `estimate_geometry().pose`;
+- **object-bottom minus support-top**, using `q90` of the support's top surface (a plate's rim, not
+  its median).
+
+Both are measured against the *landed* object. Measured on `libero_goal_swap/task_8` (verifier,
+seeds 51–55, 5/5): residual to plate centre **7.2–13.0 mm**, object-bottom minus support top
+**−7.2..+0.1 mm** — and those numbers are taken **at contact while the gripper is still closed**,
+because this benchmark's predicate fires there. Say which instant you measured; a residual taken
+before release is not a settled placement.
+
+If the arm must back out first, release and retract, then re-observe; a retreat that returns after
+**1 tick** with `ok=False` is evidence the episode was already over, not that the retreat failed.
+
 ### Physics Settling After Release
 
 After releasing a grasped object, the object needs a few control ticks to settle before the
@@ -71,6 +207,11 @@ settle gets **no** ticks at all. Measured on `libero_goal_task/task_1` and indep
 `libero_spatial_task/task_4`, which lost a whole program version to the false hypothesis. On
 LIBERO, Robosuite and RoboCasa `set_gripper` now also *refuses* any value between 0.0 and 1.0
 with `unsupported`, so there is no partial-width call to fall back on either.
+
+**`set_grippers({"primary": 1.0})` — the multi-arm form — buys no ticks either.** Measured on
+`libero_goal_swap/task_9`: `ok=False`, `steps_executed=0` on 15/15 calls across five seeds, with
+`settle_steps_total` 0 on every episode. The warning above names only `set_gripper`, which is
+easy to read past when the program happens to use the plural form.
 
 Advance time with something that actually steps. A one-tick hold of the arm's own measured
 joints is the cheapest, and it commands the gripper explicitly rather than relying on a latched
