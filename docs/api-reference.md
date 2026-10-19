@@ -212,6 +212,44 @@ where a package currently re-exports their Python classes.
 - `segment_points()` does not expose provider point labels.
 - `execute_trajectory(..., stop_on_termination=False)` returns an unsupported failure.
 - Public step and execution results remove reward, success, and nested sensitive diagnostics.
+- **`steps_executed` is not a tick count on every path.** A `step(action)` call that advances one
+  control tick can report `steps_executed=0` while the simulator time really did advance: measured on
+  `libero_goal_swap/task_8` (verifier, 5 seeds), eight hand-built `step()` calls returned
+  `ok=True, steps_executed=0` and each advanced exactly one tick — 282 motion ticks plus those 8
+  equalled the 290 episode records, and the jaw demonstrably moved. Use `simulator_time_s` (or the
+  recorded `episode/steps.jsonl` length) when you need to know whether time advanced; use
+  `steps_executed` only where the adapter documents it as a servo count.
+- **The arm moves ~0.0075–0.011 rad/tick, about 6x slower than an interpolated plan implies.**
+  Measured on `libero-pro` at 20 Hz (peak joint rate 0.23 rad/s): a joint needs 0.0075–0.011 rad of
+  travel per control tick, while `plan_motion`'s joint interpolation is built for 0.05. Consequence:
+  a `move_to_pose` whose largest joint delta exceeds ~0.8 rad does not converge inside the adapter's
+  settle loop and returns `timeout: final trajectory waypoint did not converge` with a large residual
+  (measured: 0.81 rad of a 1.90 rad move). Size the budget from the measured distance
+  (`cap = joint_distance / 0.0085 + 25`) and prefer `solve_ik` + `move_to_joints` when you know the
+  joint target.
+- **`solve_ik` returning ok is not evidence that a pose is servoable.** Measured on
+  `libero_goal_swap/task_9`: `solve_ik` accepted a low, horizontal-hand body grasp on 15/15 seeds and
+  the servo then stalled at a **0.128–0.134 rad** joint residual on 15/15 — while the same arm
+  servoed to the bottle's top at z = 0.147 with a 0.010–0.011 residual. A second 40-tick attempt
+  ended *further* away. Treat "IK ok" as necessary, not sufficient, and prove an unusual orientation
+  or low hand position with a short servo before committing a path to it.
+- **numpy reduction methods fail inside the generated-program sandbox, and the error names imports.**
+  Calling `.sum()`, `.mean()`, `.min()`, `.max()`, `.any()` or `.dtype` on a numpy array returned by
+  a tool (for example a `Segmentation.mask`) raises
+  `AttributeError: 'mappingproxy' object has no attribute '__import__'` with an empty program stderr:
+  the C-level lazy import resolves against the sandbox's restricted `__builtins__` mappingproxy.
+  There is nothing wrong with your imports. Safe equivalents, all measured: `len(mask[mask])` for a
+  pixel count, slicing, iteration, `float()`, `round()`, `sorted()`, and comprehensions over
+  `.points`. Measured on `libero_goal_swap/task_8` (2026-10-19), where `mask.sum()` cost a probe run.
+  Note also that the returned-contracts table above is an inventory, not the binding signature —
+  `SegmentationSet.segmentations` (a sequence of `Segmentation` objects carrying
+  `.mask/.label/.score/.box_xyxy`) exists in `src/cap_harness/contracts.py` even though the table
+  only says "masks, labels, scores, boxes".
+- **A failed call's `error.failure_code` can be `terminated`.** The call did not fail to execute — the
+  episode was already over because the benchmark's success predicate fired (on `task_8` the placement
+  descent returned `ok=False, failure_code=terminated` at object/support contact, with the gripper
+  still closed). Read `failure_code` before diagnosing a servo problem, and never retry or raise on
+  `terminated`.
 
 ## Real YAM
 

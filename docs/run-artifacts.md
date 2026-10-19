@@ -3,6 +3,10 @@
 `cap-harness run` executes one generated Python program and records an immutable episode.
 Operational success is separate from benchmark task success.
 
+Terminology shared by the harness and the debugging pipeline — campaign, task, version, run, tick,
+step, and the seed partitions — is defined once in [glossary.md](glossary.md) (written in Chinese
+at the operator's request; every technical term is kept in its English form).
+
 ```bash
 cap-harness run \
   --suite libero_object_swap \

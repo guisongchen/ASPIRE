@@ -3,6 +3,12 @@
 cuRobo runs in an isolated environment so its CUDA dependencies cannot modify an
 embodiment runtime. The harness process uses lightweight HTTP clients only.
 
+This page covers setup and the strategy names. For *when to reach for which backend* — with
+parameters, measured cost, failure signatures, the interpolation semantics and the
+"should we add a depth model" question — see
+[backend-selection.md](backend-selection.md) (written in Chinese at the operator's request;
+every technical term is kept in its English form).
+
 ## cuRoboV2
 
 The Apache-2.0 source is pinned at `third_party/curobo`:
