@@ -264,10 +264,10 @@ the carry offset instead (see `transport.md` §*Carry Offset From the Pre-Grasp 
 ## Body Pinch at the Centre of Mass for a Necked Bottle
 
 **Trigger.** An upright bottle or can whose neck is narrower than its body, to be **carried**
-(lifted, rotated, transported), not merely lifted. A top-down jaw can only take the neck — the
-pads sit ~0.045 m below the eef pose, so descending far enough to grip the body puts the palm
-level with the neck — and a neck pinch is a weak carry, though **not** an impossible one: its friction-torque margin is
-roughly grip·μ·half-neck-width ≈ 0.08 N·m against the ≈0.14 N·m a centre 7 cm below the grip needs,
+(lifted, rotated, transported), not merely lifted. A top-down jaw can only take the neck — the neck is
+the only part the pads can reach from above without the palm fouling the body — and a neck pinch is a
+weak carry, though **not** an impossible one: its friction-torque margin is roughly
+grip·μ·half-neck-width ≈ 0.08 N·m against the ≈0.14 N·m a centre 7 cm below the grip needs,
 so the object rotates at the jaws as soon as the hand translates fast or rotates. Measured: a 1.2 cm
 neck pinch lifted a 15.8 cm bottle cleanly and lost it during an 11 cm lateral retract; a 2 cm-per-move
 segmented carry did hold it, so the limit is acceleration, not distance.
@@ -280,6 +280,17 @@ PyRoki (`solution exceeds the public pose residual limits`) before any motion, o
 honest claim is: *a neck/cap pinch carries a lift-and-place; it has not been shown to survive a
 reorientation, and the torque argument predicts it will not.* Do not state the untested half as
 measured, and prefer the body pinch when a reorientation is coming.
+
+**Pad offset: the pads are at the eef pose, not 45 mm below it.** This entry used to say the pads
+sit ~0.045 m below the eef; two measured runs exclude that. On `libero_goal_swap/task_2`, a top-down
+cap pinch closed at **0.1847–0.1860** with the achieved eef at z 0.1388–0.1392 (cap top 0.1459–0.1462),
+and re-running the same program with the entry 12.31 mm higher closed at **0.1552–0.1554** with the
+eef at 0.1513–0.1515 — a 0.0297 jaw-travel drop for a 12.31 mm rise, i.e. a taper of 0.196 mm of
+contact width per mm of height, not a fixed offset. **The closure magnitude is the decisive test:** a
+45 mm offset would have put the pads on the bottle's 39 mm body and read closure ≈ 0.48, not 0.185.
+Bounded by those two runs: the offset is **≥ −7.0 mm and ≤ +5.3 mm** — "pads at the eef pose" to
+within a pad half-height. Do not add a pad-offset constant to a grasp height; measure the achieved eef
+and use the closure to confirm what the jaws actually met.
 
 **Code.** Pinch the body at 45 % of its height, hand z-axis horizontal, jaws straddling the body.
 
