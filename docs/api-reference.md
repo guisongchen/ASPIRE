@@ -227,6 +227,14 @@ where a package currently re-exports their Python classes.
   (measured: 0.81 rad of a 1.90 rad move). Size the budget from the measured distance
   (`cap = joint_distance / 0.0085 + 25`) and prefer `solve_ik` + `move_to_joints` when you know the
   joint target.
+- **A `move_to_pose` also pays a fixed final settle window, so N calls cost 119·N ticks even when each
+  moves only ~1 rad.** Measured on `libero_goal_swap/task_5` (dev seeds 51–65, program v00): nine
+  `move_to_pose` calls spent **990 of 990 ticks** and the end effector was still **7–21 cm above the
+  table**, with the last call returning `adapter_failed: "executing action in terminated episode"`.
+  The same reach, re-expressed as `solve_ik` + `move_to_joints` staged into **5 cm rungs**, completed
+  in **96 ticks** (home → eef z 0.0196, residuals 0.016–0.019, each rung landing ~1 cm above its
+  command). So a long descent is the worst case for `move_to_pose`: the settle window is charged per
+  call, not per metre. Stage a descent into rungs and size each call from its joint distance.
 - **`solve_ik` returning ok is not evidence that a pose is servoable.** Measured on
   `libero_goal_swap/task_9`: `solve_ik` accepted a low, horizontal-hand body grasp on 15/15 seeds and
   the servo then stalled at a **0.128–0.134 rad** joint residual on 15/15 — while the same arm
