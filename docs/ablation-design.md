@@ -160,6 +160,9 @@ T0 独有 2、一致失败 0），精确 McNemar **p = 0.0013** → **A1-4 的�
 报告：`outputs/ablation/results/claim1_report.md`；配对数据 `outputs/ablation/results/claim1/claim1.json`；
 分析脚本 `outputs/ablation/claim1/analyze_claim1.py`（判据写死在代码里）。
 
+> **下次从这里开始**：重复求解的操作步骤、环境命令、判读规则与"不要做的事"在
+> `outputs/ablation/claim1/HANDOFF.md`（本地，`outputs/` 不入库）。
+
 **T0 的轨迹本身就是主张 1 的证据**：T1 在 v02 到 15/15，T0 用满 8 版（含 3 个 0-tick 自造探针）
 才到 11/15，最终机制几乎相同——**差的是到达它的成本，不是能力**（L-1）。其中 v07 专改"承载高度"
 却 **0 个种子改变**，T0 无法自己判断改动是否生效；这一条是协调者用"两个版本的通过集相等"挡住的。
