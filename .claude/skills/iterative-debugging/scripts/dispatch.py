@@ -217,6 +217,14 @@ def main() -> int:
     parser.add_argument("--benchmark", default="libero-pro")
     parser.add_argument("--run-root", type=Path, default=None)
     parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=None,
+        help="the tick horizon written into the prompt header (default 1000, the LIBERO suite "
+        "declaration); the header said '<... unless explicitly configured>' for every prompt "
+        "staged in the 2026-10 task, because no campaign setting carries it",
+    )
+    parser.add_argument(
         "--unseen-seeds",
         default=None,
         help="seeds a worker must never probe; range-checked in the addenda "
@@ -245,21 +253,52 @@ def main() -> int:
     out_dir = args.out_dir or run_root / "prompts"
     out_dir.mkdir(parents=True, exist_ok=True)
     common = COMMON_ADDENDA.format(cap_root=ROOT)
-    unseen_seeds = args.unseen_seeds or format_seed_range(
-        campaign_settings(run_root)["unseen_seeds"]
-    )
+    settings = campaign_settings(run_root)
+    unseen_seeds = args.unseen_seeds or format_seed_range(settings["unseen_seeds"])
+    max_steps = args.max_steps if args.max_steps is not None else 1000
 
     if args.role == "worker":
         body = fill(
             WORKER_TEMPLATE,
             {
-                "BENCHMARK: <libero-pro|robosuite|robocasa>": f"BENCHMARK: {args.benchmark}",
+                "BENCHMARK: <libero-pro|robosuite>": f"BENCHMARK: {args.benchmark}",
                 "SUITE:     <full suite name, e.g. libero_goal_swap>": f"SUITE:     {args.suite}",
                 "TASK_ID:   <integer task id>": f"TASK_ID:   {args.task_id}",
                 "GPU:       <assigned simulation GPU>": f"GPU:       {args.gpu}",
                 "RUN_ROOT:  <campaign root, e.g. outputs/runs/2026-07-09_14-32-00>": f"RUN_ROOT:  {run_root}",
+                "MAX_STEPS: <campaign comparison limit; default 1000 unless explicitly configured>": (
+                    f"MAX_STEPS: {max_steps}"
+                ),
+                "DEV_SEEDS: <development seed list from campaign.json>": (
+                    f"DEV_SEEDS: {format_seed_range(settings['dev_seeds'])}"
+                ),
+                "UNSEEN_SEEDS: <unseen-check seed list from campaign.json>": (
+                    f"UNSEEN_SEEDS: {format_seed_range(settings['unseen_seeds'])}"
+                ),
+                "HELDOUT_COUNT: <heldout_count from campaign.json; coordinator-owned seeds 1..N>": (
+                    f"HELDOUT_COUNT: {settings['heldout_count']}"
+                ),
             },
         )
+        # A hand-filled header is how this went wrong once: every prompt staged on 2026-10-20 shipped
+        # "DEV_SEEDS: <development seed list from campaign.json>", and a worker reading that literally
+        # could probe an unseen or held-out seed. Fail loud instead of shipping a placeholder.
+        # Match the placeholder text exactly: the body legitimately contains examples such as
+        # "BENCHMARK: <benchmark>" in a framing block, so a "KEY: <" prefix test false-positives.
+        placeholders = (
+            "BENCHMARK: <libero-pro|robosuite>",
+            "MAX_STEPS: <campaign comparison limit",
+            "DEV_SEEDS: <development seed list",
+            "UNSEEN_SEEDS: <unseen-check seed list",
+            "HELDOUT_COUNT: <heldout_count",
+        )
+        leftovers = [marker for marker in placeholders if marker in body]
+        if leftovers:
+            raise SystemExit(
+                "staged prompt still contains unfilled header placeholders "
+                f"({', '.join(leftovers)}). The template's header changed and the substitution keys "
+                "above no longer match it — update the keys rather than filling the header by hand."
+            )
         addenda = common + WORKER_ADDENDA.format(unseen=unseen_seeds)
         out = out_dir / f"worker_{args.suite}_{args.task_id}.txt"
     else:
