@@ -113,6 +113,63 @@ Never disambiguate with native simulator objects, hidden IDs, known seed coordin
 pixel locations. Re-localize after contact or a failed grasp — the object may have moved; do not
 reuse a stale center.
 
+**Identity selectors disagree on this scene (measured column, 5/5 seeds).** The selector order above
+(relation → sign of the support gap → candidate height → proximity) was scored head to head on
+`libero_goal_swap/task_2`, where the prompt `"cabinet"` returns a drawer chest, a sloped wooden rack
+and the table: **relation** and **flat fraction** both picked the drawer top, while **height**
+(z_ref 0.293–0.296) and **proximity** both picked the **sloped rack**. Two of the four are wrong here.
+"The taller one" and "the nearer one" are not axioms — compute the column and report it
+(see the next section for the flatness test that separated them).
+
+---
+
+## Receiving Surface: Select by Flat Fraction, Not by Score
+
+**Trigger.** The prompt names a **receiver** (a chest, a tabletop, a shelf) rather than a manipulated
+object, and it returns several candidates of which only one is a horizontal top — a sloped rack, a
+table edge, the robot arm.
+
+```python
+def quantile(values, fraction):
+    ordered = sorted(float(value) for value in values)
+    return ordered[int((len(ordered) - 1) * fraction)]
+
+best = None
+for cand in segment_text("agentview", "cabinet").segmentations[:3]:
+    c = float(cand.score)
+    if c < 0.15:
+        continue
+    cloud = mask_to_point_cloud(cand.mask, "agentview", target_frame=base_frame)
+    pts = cloud.points
+    if len(pts) < 400:
+        continue
+    z_ref = quantile((float(p[2]) for p in pts), 0.95)
+    flat = [p for p in pts if z_ref - 0.013 <= float(p[2]) <= z_ref + 0.013]
+    frac = len(flat) / float(len(pts))
+    if frac < 0.30 or z_ref < bottle_base_z + 0.03:
+        continue
+    if best is None or frac > best[0]:
+        best = (frac, flat, z_ref)
+
+frac, flat, top_z = best
+top_z = quantile((float(p[2]) for p in flat), 0.50)
+place_x = 0.5 * (quantile((float(p[0]) for p in flat), 0.02) + quantile((float(p[0]) for p in flat), 0.98))
+place_y = 0.5 * (quantile((float(p[1]) for p in flat), 0.02) + quantile((float(p[1]) for p in flat), 0.98))
+```
+
+**Evidence.** `libero_goal_swap/task_2`, "cabinet": the drawer chest is **top-1** with flat fraction
+**0.729–0.796** (verifier, 5 seeds; 0.699–0.831 over the proposer's 30) against the sloped rack's
+**0.112–0.143**, and `top_z` was **0.2158 on every seed**. Use `q50` of the flat band, not `q95` of
+the whole cloud, for the support height.
+
+**What the flat test is actually for.** Not for beating the field on score — the drawer was already
+top-1 on all 35 measured seeds, so the rule **never had to fire**. Its job is rejecting the rack, and
+the 0.15 score floor does most of the filtering. The third candidate here is the **table/floor**
+(score 0.106, flat 0.529, z_ref 0.0049), not the robot arm as the proposing task believed; it is
+dropped by the score floor before the flat test runs. Keep this rule labelled a **tie-breaker**
+(the drawer/rack score margin did fall to 0.090–0.169 on the worst seed), not a substitute for a
+good prompt.
+
 ---
 
 ## Relative Score Thresholds (never gate on a fixed cutoff)
@@ -319,3 +376,4 @@ run evidence.
 
 | Target | Z formula | Notes |
 |---|---|---|
+| `libero_goal_swap` drawer top, upright bottle | `place_eef_z = top_z + carry`, where `carry = eef_z_at_close − object_base_z` | Measured carry **0.1436–0.1452** (proposer quoted 0.1454–0.1483, sd 0.73 mm); landed base **3.5–4.6 mm** above the measured plane on 5/5 seeds. Both terms are measured **before the lift** — from the object's pre-grasp cloud and the achieved eef z at close, never from the held object. The descent then self-limits ~24–26 mm above the commanded z; that shortfall is *not* by itself a contact certificate (`transport.md` § *A Descent That Self-limits…*). |

@@ -327,6 +327,70 @@ is accepted. Do not read this entry as a way to lay a bottle down.
 
 ---
 
+## Top-Down Cap Pinch for an Upright Bottle (no wrist reorientation)
+
+**Trigger.** An upright necked bottle that must be CARRIED elsewhere, on an embodiment where a
+horizontal side grasp would need a ~90° wrist roll. On `libero_goal_swap/task_2` that roll costs a
+**1.31 rad** wrist rotation, which alone is **205 ticks**, and the side-grasp plan budgets **814 of
+1000** against 280–293 actually needed for the cap pinch. No wrist rotation is needed here, so the
+reset hand orientation is kept end to end.
+
+```python
+def quantile(values, fraction):
+    ordered = sorted(float(value) for value in values)
+    return ordered[int((len(ordered) - 1) * fraction)]
+
+def servo(pos, quat, tolerance):
+    ik = solve_ik(Pose(tuple(pos), tuple(quat), base_frame))
+    now = [float(v) for v in get_robot_state().joint_positions["primary"]]
+    delta = max(abs(float(ik.joint_positions[i]) - now[i]) for i in range(7))
+    move_to_joints([float(v) for v in ik.joint_positions], tolerance=tolerance,
+                   max_steps=int(delta / 0.0075) + 35)
+
+base_frame = get_robot_state().base_frame
+down = [float(v) for v in get_robot_state().end_effector_poses["primary"].quaternion_wxyz]
+points = localize_object("wine bottle", camera_name="agentview", target_frame=base_frame).point_cloud.points
+z_top = quantile((float(p[2]) for p in points), 0.98)
+cap = [p for p in points if float(p[2]) >= z_top - 0.015]
+aim_x = 0.5 * (quantile((float(p[0]) for p in cap), 0.02) + quantile((float(p[0]) for p in cap), 0.98))
+aim_y = 0.5 * (quantile((float(p[1]) for p in cap), 0.02) + quantile((float(p[1]) for p in cap), 0.98))
+
+open_gripper()
+servo((aim_x, aim_y, z_top + 0.15), down, 0.03)
+for rung in range(3):
+    servo((aim_x, aim_y, z_top - 0.012 - rung * 0.014), down, 0.012)
+    closed = close_gripper()
+    closure = float(closed.diagnostics["final_position"])
+    if closure > 0.10:
+        break
+    open_gripper()
+```
+
+**Evidence.** `libero_goal_swap/task_2`: **15/15** development (seeds 51–65) and **15/15** unseen
+(66–80), one measurement each. A verifier applying this entry plus the placement snippet reached
+**5/5 on attempt 2**, reproducing the grasp half exactly: closure **0.1848–0.1851** against the
+proposer's 0.1847–0.1860, measured cap top **0.1460–0.1461**, achieved eef z **0.1370–0.1372**, and
+every seed gripped on **rung 0**. Air close reads ≈ **0.045**, so the 0.10 gate is the discriminator;
+the three rungs cover 28 mm of entry height.
+
+**The carry limit is part of this entry, not an afterthought (2026-10-20).** Driven literally together
+with a placement snippet, this grasp was asked for **one 0.60 rad diagonal move that lifted 0.272 m
+and translated 0.270 m at once** — and the bottle left the jaws on **2/5** seeds (jaw 0.185 →
+0.0138/0.0136). Lifted **vertically to transit height first**, then carried in **≤ 0.02 m segments**,
+it held **0.1853–0.1857 across 16–17 waypoints and passed 5/5**. So: *a cap pinch carries up; it
+carries sideways only in short segments.* See `transport.md` § *Lift Before You Translate, Then
+Segment the Carry*. The "rose 0.2743 m with no slip" figure that motivated this entry is a **vertical**
+lift and says nothing about a lateral carry — do not quote it as transit evidence.
+
+**Two different millimetres — do not conflate them.** The pad-offset bound in § *Body Pinch at the
+Centre of Mass for a Necked Bottle* (**≥ −7.0 mm, ≤ +5.3 mm**) is about where the pads sit relative to
+the eef. Independently, a command at z_top − 0.012 was executed **3.0–3.2 mm high** on 5/5 verifier
+seeds (commanded 0.1340, achieved 0.1370–0.1372): that is **servo undershoot**, a scene- and
+run-specific number, not a pad offset. If you add the two you will double-count. Always interpret a
+closure against the **achieved** eef z.
+
+---
+
 ## Key Conventions
 
 **Grasp with `close_gripper()`, never `set_gripper(0.0)`** — they are not equivalent. `close_gripper()` accepts a *contact stall* as success: the jaw stops on the object, the call returns `ok=True`, and the harness records the commanded gripper as closed.

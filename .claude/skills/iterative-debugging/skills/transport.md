@@ -53,6 +53,28 @@ branch conditioning is not enough, request collision-aware planning explicitly:
 Add a subsection here (trigger → code → evidence) when the arm must move laterally before
 lifting to avoid sweeping through obstacles (opened drawers, adjacent objects, cabinet edges).
 
+### Lift Before You Translate, Then Segment the Carry
+
+**Trigger.** A pinched (not body-grasped) object that has to change **height and xy at the same
+time** — a placement on a raised support, a carry across the table.
+
+**Measured limit.** A verifier on `libero_goal_swap/task_2` composed a top-down cap pinch with the
+placement snippet literally, so the program made **one 0.60 rad diagonal move that lifted 0.272 m
+and translated 0.270 m at once**. The bottle left the jaws on **2/5** seeds (jaw 0.185 → 0.0138 /
+0.0136). Split into *lift vertically to the transit height first, then carry in segments of
+≤ 0.02 m*, the same program held the jaw at **0.1853–0.1857 across 16–17 waypoints and passed 5/5**.
+
+**Why it is the same rule as the neck-pinch one.** The cap/neck pinch's friction-torque margin is
+small (`grasp.md` § *Body Pinch at the Centre of Mass for a Necked Bottle* derives it); a diagonal
+move spends that margin on vertical acceleration **and** on the yaw in one call. The limit is
+acceleration and simultaneity, not distance — a **2 cm** per-move segmented carry already held an
+object that an **11 cm** single retract dropped.
+
+**Do not read a vertical lift as transit evidence.** The proposing task itself reported "the bottle
+rose 0.2743 m with no slip", which was true and said nothing about a lateral carry; the slip only
+appeared when someone drove the two snippets together. When you grade a carry entry, ask which axes
+moved in the *same* call.
+
 ---
 
 ## Placement Approach
@@ -93,6 +115,14 @@ within 5 mm and the short axis exactly z** — because the upright bottle's base
 Every seed passed. The read to use is *which axis is short and by how much*: a pure-z shortfall
 with xy converged is contact; a joint-space residual on several axes is a servo failure.
 
+**But a small pure-z shortfall is not evidence of contact (2026-10-20).** On
+`libero_goal_swap/task_2` a 2 mm threshold read `contact=True` at a shortfall of exactly **4.0 mm**
+with xy within 1.2 mm — **on the two seeds where the bottle had already dropped and the jaws were shut
+on air** (jaw 0.0131/0.0132). The ordinary servo shortfall is the same size as the threshold, so the
+shortfall alone certifies nothing. Require **> 10 mm**, or a positive corroboration such as
+`gripper_positions["primary"] >= 0.10` (still holding something), and treat contact inferred from a
+few millimetres as *unverified* rather than as a measured placement.
+
 For a **held object**, the release can be judged the same way: if `open_gripper()` returns
 `ok=False` after a few steps while `gripper_positions["primary"]` has moved most of the way open
 (measured 0.72–0.94), the object is released — read the achieved jaw position, not the flag.
@@ -103,6 +133,12 @@ fired at object/support contact and ended the episode. The outside signature is 
 servo-limited descent (pure-z shortfall, xy converged, one axis short), so a program must read
 `failure_code` before it diagnoses anything: on `terminated`, do not retry, do not raise, and do not
 assume a release happened.
+
+`failure_code` may also be **absent**. On `libero_goal_swap/task_2` the same descent returned
+`ok=False` with `failure_code=None` on **5/5** seeds and never `terminated`; the termination appeared
+only later, in `outcome.json` (`termination_reason=task_succeeded`). So `None` is not evidence of a
+failed motion and must not send a program into a retry: grade the measured shortfall **and** the jaw
+(see the 10 mm rule above), not the code.
 
 The transit that got a held bottle over a 0.33 m obstacle without sweeping through it (5/5 seeds,
 40–42 + 44–51 + 122 steps): raise at the grasp xy to `q99(obstacle_z) + 0.07`, translate at that
@@ -124,7 +160,7 @@ cannot eat the episode; each costs ~6-10 ticks.
 def goto(goal, quat, frame, tolerance=0.006, attempts=3):
     goal = [float(v) for v in goal]
     want = list(goal)
-    for _ in range(attempts):
+    for attempt in range(attempts):
         move_to_pose(Pose(position=want, quaternion_wxyz=quat, frame=frame), tolerance, 200)
         eef = [float(v) for v in get_robot_state().end_effector_poses["primary"].position]
         if max(abs(eef[i] - goal[i]) for i in range(3)) <= tolerance:
