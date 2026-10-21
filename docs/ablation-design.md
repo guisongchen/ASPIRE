@@ -386,3 +386,34 @@ T0 34→50（+16pp）**。设计分辨不出"trace 无效"与"无 trace 那一�
 
 报告：`outputs/ablation/results/claim1_report.md`（顶部"结论"一节）；协调日志（每次回传的原话）：
 `outputs/ablation/claim1/replicate2_log.md`。
+
+### D-11 主张 1 两轮共 8 条库提案的处理（2026-10-21，实验结束后统一裁决）
+
+三个臂（r1-T0、r2-T1、r2-T0）共提出 **8 条**：4 条新小节、4 条对既有小节的修改（另有若干重复
+指向同一处）。实验期间**一条都没动库**（§四.1）。实验结束后按"证据强度"分两档处理，**库从
+`b6f72c4bc6ab3354` 升到 `b8769beb11ea2e82`**，`lint_skills.py` 退出 0。
+
+**已合并（5 处，都是"对既有小节的实测补充"，且每条都标了 seed 集与求解数）**
+
+| 位置 | 加了什么 | 证据 |
+|:---|:---|:---|
+| `grasp.md#Body Pinch` | 顶向体部下降在 task_9 上够不到体部（eef z 0.109–0.114，偏轴 3.1 cm），垫子合在**瓶颈**上；体部点只有**水平手**（侧抓）够得到；35–55 % 高度带内夹持高度不敏感 | **两个独立求解**都撞上顶向停滞；高度带是单求解的 15 seed 消融 |
+| `transport.md#Stage the Approach` | rotate-in-place 段实测 382–483 tick、4/15 不收敛；**删掉 TIMEOUT 的粗接近段反而 0/15** | 前者单求解，后者另一求解 |
+| `transport.md#A Descent That Self-limits` | 首级 rung 下欠量 2.4–6.5 mm，4 mm 阈值落在噪声带内；近沿 x 处 5.8 mm 误判 → 瓶落桌 0/15；同样的 3.4 cm 释放在中位 15/15 | 两个求解各贡献一半 |
+| `localize.md#AABB Pose Is Not a Centre` | 把瞄准从分位数换成 `geometry.pose` → **0/15**，瞄点落后中位 6.5–10.7 cm | 第二个独立求解的行为后果（不是只重复几何偏差） |
+| `localize.md#Prompt Registry` | task_9 的 `"wine bottle"` / `"wooden wine rack"` 行 + 与 task_2 cabinet 的混淆提示 | 单求解的 15 seed 实测 |
+
+**未合并（3 条新小节 + 1 条与新小节重复的修改），原因不是"不好"，是没验证**
+
+1. r1-T0：*Topple a cylinder onto a sloped receiver*（v02 3/15 → v05 11/15）；
+2. r2-T1：*Place on a Sloped Receiving Plane at the Whole-Cloud Median*（中位 15/15 vs 顶带 0/15）；
+3. r2-T0：*Segments Protect the Release, Not the Grip*（单段 14/15、斜向 0/15）；
+4. r2-T0 的 *Top-Down Descent Stalls…* 新小节——内容已并入 `grasp.md` 的修改，不再单列。
+
+这四条是**可复用的处方**（"在哪里瞄""怎么搬"），而今天刚测出：单次求解的 15-seed 结果可以完全
+不可复现（D-10）。所以它们要过 `dispatch.py verify` 的独立验证才能进库；文本留在两个臂的
+`findings.md` 里，没有丢。**在验证之前，报告与对外表述不得引用这四条。**
+
+**一条新约定（写给出结论的人）**：从本轮起，进库的每个实测数字都要带"几个求解、哪批 seed"。
+理由就是 D-10——同一个任务、同一套库、同样的预算，两次求解可以差 16pp。只写"实测 15/15"而不写
+求解数，是这套库里最容易误导下一位读者的一种写法。
