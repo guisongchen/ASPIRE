@@ -91,7 +91,7 @@ def build_split(rows, holdout_seeds: set[int]):
     return train, holdout
 
 
-def load_episodes(rows, size: int, camera: str) -> list[dict]:
+def load_episodes(rows, size: int, camera: str, prev_action: bool = False) -> list[dict]:
     out = []
     for row in rows:
         cam = row["cameras"].get(camera)
@@ -100,12 +100,16 @@ def load_episodes(rows, size: int, camera: str) -> list[dict]:
         arrays = np.load(row["arrays"])
         ticks = row["ticks"]
         frames = read_frames(Path(cam["video"]), ticks, size)
+        actions = arrays["actions"][:, :7].astype(np.float32)
+        proprio = [arrays["qpos"], arrays["eef_pos"], arrays["gripper"][:, None]]
+        if prev_action:
+            # Give the network the same information the lag-1 baseline already has. Without this the
+            # comparison is not between two models but between a model and a model plus a_{t-1}.
+            proprio.append(np.vstack([actions[:1], actions[:-1]]))
         out.append({
             "frames": frames,                       # (T, S, S) uint8
-            "actions": arrays["actions"][:, :7].astype(np.float32),
-            "proprio": np.concatenate([
-                arrays["qpos"], arrays["eef_pos"], arrays["gripper"][:, None],
-            ], axis=1).astype(np.float32),
+            "actions": actions,
+            "proprio": np.concatenate(proprio, axis=1).astype(np.float32),
             "seed": row["seed"],
         })
     return out
@@ -224,14 +228,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--arms", default="mean,state,image+state")
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
+    parser.add_argument("--prev-action", action="store_true",
+                        help="append the previous commanded target to the model input, so the "
+                             "network has the same information the lag-1 baseline has")
     args = parser.parse_args(argv)
 
     torch.set_num_threads(max(1, torch.get_num_threads()))
     rows = load_rows(Path(args.index))
     train_rows, holdout_rows = build_split(rows, parse_seeds(args.holdout_seeds))
     print(f"train episodes {len(train_rows)}  held-out episodes {len(holdout_rows)}")
-    train_eps = load_episodes(train_rows, args.size, args.camera)
-    holdout_eps = load_episodes(holdout_rows, args.size, args.camera)
+    train_eps = load_episodes(train_rows, args.size, args.camera, args.prev_action)
+    holdout_eps = load_episodes(holdout_rows, args.size, args.camera, args.prev_action)
     print(f"frames cached: train {sum(len(e['actions']) for e in train_eps)}, "
           f"held-out {sum(len(e['actions']) for e in holdout_eps)}")
 
@@ -248,7 +255,8 @@ def main(argv: list[str] | None = None) -> int:
         "train_episodes": len(train_rows), "holdout_episodes": len(holdout_rows),
         "train_ticks": int(sum(r["ticks"] for r in train_rows)),
         "holdout_ticks": int(sum(r["ticks"] for r in holdout_rows)),
-        "epochs": args.epochs, "device": args.device, "results": results,
+        "epochs": args.epochs, "device": args.device, "prev_action": args.prev_action,
+        "results": results,
         "scope": "teacher-forced action error on held-out seeds; NOT a task-success measurement",
     }
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
