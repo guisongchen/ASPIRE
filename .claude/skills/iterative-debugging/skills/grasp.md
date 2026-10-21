@@ -281,6 +281,21 @@ honest claim is: *a neck/cap pinch carries a lift-and-place; it has not been sho
 reorientation, and the torque argument predicts it will not.* Do not state the untested half as
 measured, and prefer the body pinch when a reorientation is coming.
 
+**A top-down body descent does not reach the body on `libero_goal_swap/task_9` (2026-10-21, two
+independent solves).** Both no-trace solves of the claim-1 replicate tried a top-down pinch at 45-50 %
+of the bottle's height and both stalled identically: `solve_ik` returned a clean solution, the servo
+then stopped 3-4 cm above it (achieved eef z **0.109-0.114**, 0.13-0.15 rad residual, **3.1 cm**
+off-axis), and the pads closed on the **neck** instead — 1.5 cm, jaw 0.1846-0.1872. That neck grip
+then carried 0.305 m up and 0.23 m across with the jaw unchanged, and a cap-only variant was equally
+15/15, so on this scene the stalled body rung is **optional**. Do not read that as "the body pinch
+works": the top-down variant never executed. The body point is reachable with the **horizontal hand**
+(side grasp, 90° wrist roll); raising `max_steps` does not make the top-down descent finish.
+
+**Pinch height is not the critical variable between 35 % and 55 % of observed height** (task_9, dev
+seeds 51-65, one solve): 35 %, 45 % and 55 % each passed 15/15 in one-variable sweeps, so do not
+over-fit the fraction. The failure modes on this task live in the **aim** (`localize.md` § *AABB Pose
+Is Not a Centre*) and in the **carry composition**, not in the height.
+
 **Pad offset: the pads are at the eef pose, not 45 mm below it.** This entry used to say the pads
 sit ~0.045 m below the eef; two measured runs exclude that. On `libero_goal_swap/task_2`, a top-down
 cap pinch closed at **0.1847–0.1860** with the achieved eef at z 0.1388–0.1392 (cap top 0.1459–0.1462),

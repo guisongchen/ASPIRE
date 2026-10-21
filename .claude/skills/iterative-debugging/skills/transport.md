@@ -104,6 +104,15 @@ home->low-standoff move **always** lands 4-8 cm short in +y, and the "sensible r
 sweeps the 8 cm-wide open jaw horizontally at the target's own mid-height — it knocked the bottle over
 on 7/15 seeds. Re-issue a long approach **at height**, never sideways at grasp height.
 
+**What that staging costs, and which stage you must not delete (2026-10-21, `task_9`).** The
+rotate-in-place stage alone cost **382-483 ticks** of the 1000-tick horizon on 15/15 seeds, and 4 of
+those seeds ended 0.22-0.36 rad from the commanded orientation — judge every stage by its **achieved**
+pose, never by `ok` alone. The counter-intuitive half comes from an independent solve: deleting the
+coarse far stage (the 0.09 m stand-off, which itself returns TIME OUT at 2.6-6.8 cm residual on 15/15)
+and starting from the 0.02 m stand-off failed **0/15** — the near move timed out 5.6-7.0 cm short and
+the open jaws swept the bottle aside (closure on air 0.0494-0.0496). **A stage that does not converge
+can still be load-bearing**; remove it only on the strength of an ablation that removed it.
+
 ### A Descent That Self-limits on the Held Object Is a Placement, Not a Failure
 
 When you carry an object down onto a receiving surface, the descent may stop **short of its
@@ -122,6 +131,14 @@ on air** (jaw 0.0131/0.0132). The ordinary servo shortfall is the same size as t
 shortfall alone certifies nothing. Require **> 10 mm**, or a positive corroboration such as
 `gripper_positions["primary"] >= 0.10` (still holding something), and treat contact inferred from a
 few millimetres as *unverified* rather than as a measured placement.
+
+**What a threshold inside the servo-noise band costs, measured (`task_9`, dev seeds 51-65).** The
+first descent rung's undershoot ranged **2.4-6.5 mm**, so a 4 mm contact threshold fires inside the
+band this rule exists to exclude. A program that ran with 4 mm declared contact at rung 1 on **7/15**
+seeds and released 3.1-3.4 cm above the front edge (those seeds still passed); at a near-edge x aim a
+**5.8 mm** undershoot released the bottle 3.4 cm over the front edge and the bottle fell to the table
+(**0/15**). Releasing 3 cm above the contact estimate at the rack's **centre** passed 15/15 in an
+independent solve — so the punishment is release height **and** edge margin together, not height alone.
 
 For a **held object**, the release can be judged the same way: if `open_gripper()` returns
 `ok=False` after a few steps while `gripper_positions["primary"]` has moved most of the way open

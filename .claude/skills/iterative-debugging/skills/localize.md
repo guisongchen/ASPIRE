@@ -68,6 +68,8 @@ handling), write it as a subsection instead and keep at most a pointer row here.
 | drawer handle (stacked set) | `"drawer handle"` | libero-pro/libero_goal_swap/task_0 | Returns the whole stack (3 strong) + stragglers ≤0.2; select with Relative Score Thresholds + middle-of-stack. Mask bleeds 2–4 cm behind the bar — use Foremost-Depth Shell. |
 | middle drawer handle | ~~`"middle drawer handle"`~~ | libero-pro/libero_goal_swap/task_0 | Dead end: all candidates ≤0.15. Spatial selection from `"drawer handle"` instead. |
 | cabinet (drawer chest body) | `"cabinet"` | libero-pro/libero_goal_swap/task_0 | Weak but usable (~0.34); body center → outward/pull direction for drawer tasks. |
+| wine bottle (task_9) | `"wine bottle"` (top-1 0.926-0.953, 1589-1593 pts) | libero-pro/libero_goal_swap/task_9 | `"dark green wine bottle"` (0.945) also works. Deterministic across seeds 51-65. |
+| wine rack (task_9 receiver) | `"wooden wine rack"` (top-1 0.750, 30 634 pts) | libero-pro/libero_goal_swap/task_9 | Confusable with task_2's cabinet: `"cabinet"` on this scene returns the drawer chest (flat top z 0.2158) *and* the sloped rack. Pick by the 30k-point cloud and the inclined top, not by score. |
 
 ---
 
@@ -329,6 +331,12 @@ object, it is this AABB effect — use the quantiles. If the *quantiles themselv
 part, it is mask bleed — use the Foremost-Depth Shell. On task_9 the median was right to ~1 cm
 on all 15 seeds and only the AABB was wrong; the 6.5–10.6 cm error there is what a reader who
 knew only the shell entry would have mis-diagnosed.
+
+**Second independent solve, behavioural not just geometric (2026-10-21).** On `task_9` a one-variable
+switch of the grasp aim from the cloud quantiles to `geometry.pose` scored **0/15** dev seeds, with the
+aim **6.5-10.7 cm** behind the cloud median and the jaws closing on air (0.0491-0.0495); the quantile aim
+scored 15/15 dev and 15/15 unseen-check in the same solve. So this is not a cosmetic offset: on a
+13-16 cm bottle it is the difference between a grasp and no grasp.
 
 **Limits.** Verified for the flat, dark, upright-bottle case on one task and one verifier seed;
 the mechanism (AABB midpoint ± depth-axis outliers) is general, the exact bias is a property of
