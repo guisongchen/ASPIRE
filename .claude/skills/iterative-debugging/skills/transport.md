@@ -75,6 +75,15 @@ rose 0.2743 m with no slip", which was true and said nothing about a lateral car
 appeared when someone drove the two snippets together. When you grade a carry entry, ask which axes
 moved in the *same* call.
 
+**Scope, measured on a body grasp (2026-10-21, `task_9`, dev 51-65).** Fusing the lift and the lateral
+transit into one diagonal on a **body-pinch + `move_to_pose`** program still passed **11/15**, so this
+is not "a fused move always fails". But every one of the 15 seeds slipped: jaw **0.3841-0.3878**
+before the move, **0.0093-0.3468** at its end, against **<= 0.0079** for the same program's un-fused
+carry; and 3 of the 4 failures had lost the bottle mid-move (jaw 0.0093 / 0.0093 / 0.0205 on arrival).
+The 0/15 form of the rule belongs to a **neck/cap pinch carried in joint space (`move_to_joints`)`,
+where the diagonal drags the object across the table. Grade it by the jaw reading at the end of the
+move, not by the move's `ok`.
+
 ---
 
 ## Placement Approach
@@ -160,6 +169,31 @@ failed motion and must not send a program into a retry: grade the measured short
 The transit that got a held bottle over a 0.33 m obstacle without sweeping through it (5/5 seeds,
 40–42 + 44–51 + 122 steps): raise at the grasp xy to `q99(obstacle_z) + 0.07`, translate at that
 height, then descend in world z at the placement xy.
+
+### A Sloped Receiving Plane: Aim at the Whole-Cloud Median, Not the Top Band
+
+**Trigger.** The receiver is an inclined plane or a rack whose cloud includes a raised rear
+stopper/backboard (a wine rack, a tilted shelf), and you need an aim point that lands on the usable
+slope rather than on the stop.
+
+**Measured on `libero_goal_swap/task_9`, two programs x two aim rules (dev seeds 51-65, one sweep per
+cell).** Whole-cloud median of the rack cloud: **15/15** on the program that had aimed at the front
+edge, and **15/15** on an independent program that already aimed at the cloud median. Top z band
+(points with `z >= q98 - 0.03`, median of that band): **0/15** on **both** programs. The prescription
+transfers; the failure form does not.
+
+**What the top band costs, and why it is not a fixed signature.** On the side-grasp program the hand
+was caught on the rear stopper on 11/15 seeds (1.3-3.6 cm short). On the top-grasp program nothing
+stalled at all: every executed rung reached contact (`dz` 4.0-7.5 mm, `dxy` 0.6-5.2 mm, each rung
+`SUCCESS`), the release fired normally, and the bottle then **toppled off the rear board and slid
+7-10 cm** before coming to rest on its side (final cloud z-span **35-62 mm** against **107-119 mm**
+upright). Do not use "the descent stalls above the command" as the diagnostic: in both programs the
+rung-level contact was fine, and the difference was *where* the bottle was released.
+
+**Check the landed pose, not only the flag.** The final cloud's z-span separates upright from lying
+without another run, and the final frame's image ranks it instantly when you have `media/keyframes`.
+
+---
 
 ### Close the Loop on the Measured Pose After Every `move_to_pose`
 
